@@ -93,7 +93,8 @@ if (-not (Test-Path $setupScript)) {
 
 # Copiar script a WSL si es necesario y ejecutarlo
 Write-Host "Ejecutando configuración dentro de WSL2..." -ForegroundColor Cyan
-wsl -d $ubuntuName bash -c "cd '$wslPath' && chmod +x setup-yarn.sh && ./setup-yarn.sh"
+$bashCommand = "cd '$wslPath' && chmod +x setup-yarn.sh && ./setup-yarn.sh"
+wsl -d $ubuntuName bash -c $bashCommand
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""
@@ -107,27 +108,30 @@ Write-Host "[5/5] Verificación final..." -ForegroundColor Yellow
 
 # Verificar que todo está configurado correctamente
 Write-Host "Verificando Node.js..." -ForegroundColor Gray
-$nodeVersion = wsl -d $ubuntuName bash -c "cd '$wslPath' && node --version"
-if ($nodeVersion -match "v22\.21\.1") {
-    Write-Host "  ✓ Node.js $nodeVersion" -ForegroundColor Green
+$nodeCmd = "cd '$wslPath' && node --version"
+$nodeVersion = (wsl -d $ubuntuName bash -c $nodeCmd).Trim()
+if ($nodeVersion -match 'v22\.21\.1') {
+    Write-Host "  [OK] Node.js $nodeVersion" -ForegroundColor Green
 } else {
-    Write-Host "  ✗ Node.js versión incorrecta: $nodeVersion (esperado: v22.21.1)" -ForegroundColor Red
+    Write-Host "  [ERROR] Node.js versión incorrecta: $nodeVersion (esperado: v22.21.1)" -ForegroundColor Red
 }
 
 Write-Host "Verificando Yarn..." -ForegroundColor Gray
-$yarnVersion = wsl -d $ubuntuName bash -c "cd '$wslPath' && yarn --version"
+$yarnCmd = "cd '$wslPath' && yarn --version"
+$yarnVersion = (wsl -d $ubuntuName bash -c $yarnCmd).Trim()
 if ($yarnVersion) {
-    Write-Host "  ✓ Yarn $yarnVersion" -ForegroundColor Green
+    Write-Host "  [OK] Yarn $yarnVersion" -ForegroundColor Green
 } else {
-    Write-Host "  ✗ Yarn no está disponible" -ForegroundColor Red
+    Write-Host "  [ERROR] Yarn no está disponible" -ForegroundColor Red
 }
 
 Write-Host "Verificando Python..." -ForegroundColor Gray
-$pythonVersion = wsl -d $ubuntuName bash -c "cd '$wslPath' && python --version"
-if ($pythonVersion -match "Python 3\.9\.0") {
-    Write-Host "  ✓ $pythonVersion" -ForegroundColor Green
+$pythonCmd = "cd '$wslPath' && python --version"
+$pythonVersion = (wsl -d $ubuntuName bash -c $pythonCmd).Trim()
+if ($pythonVersion -match 'Python 3\.9\.0') {
+    Write-Host "  [OK] $pythonVersion" -ForegroundColor Green
 } else {
-    Write-Host "  ✗ Python versión incorrecta: $pythonVersion (esperado: Python 3.9.0)" -ForegroundColor Red
+    Write-Host "  [ERROR] Python versión incorrecta: $pythonVersion (esperado: Python 3.9.0)" -ForegroundColor Red
 }
 
 Write-Host ""
@@ -145,4 +149,3 @@ Write-Host "  yarn watch    - Modo desarrollo (watch)" -ForegroundColor Gray
 Write-Host "  yarn start    - Ejecutar ElixIDE" -ForegroundColor Gray
 Write-Host "  yarn test     - Ejecutar tests" -ForegroundColor Gray
 Write-Host ""
-
