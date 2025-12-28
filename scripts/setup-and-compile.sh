@@ -42,29 +42,22 @@ fi
 echo "✅ Node.js: $(node --version)"
 echo "✅ npm: $(npm --version)"
 
-# Habilitar Corepack y Yarn
-echo "Configurando Yarn..."
-corepack enable || true
-corepack prepare yarn@stable --activate || true
+# Verificar npm (VSCode ahora requiere npm)
+echo "✅ npm: $(npm --version)"
 
-# Verificar Yarn
-if command -v yarn &> /dev/null; then
-    echo "✅ Yarn: $(yarn --version)"
-else
-    echo "⚠️  Yarn no disponible, intentando instalar..."
-    npm install -g yarn
-    echo "✅ Yarn: $(yarn --version)"
-fi
-
-# Instalar dependencias
+# Nota: VSCode ahora requiere npm en lugar de yarn
 echo ""
-echo "=== Instalando dependencias (esto puede tardar 10-15 minutos) ==="
-yarn install
+echo "⚠️  VSCode requiere npm para la instalación"
+echo ""
+
+# Instalar dependencias con npm
+echo "=== Instalando dependencias con npm (esto puede tardar 15-30 minutos) ==="
+npm install
 
 # Compilar
 echo ""
 echo "=== Compilando proyecto ==="
-yarn compile
+npm run compile
 
 echo ""
 echo "=== Setup completado ==="
