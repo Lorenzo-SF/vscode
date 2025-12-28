@@ -1,6 +1,6 @@
 #!/bin/bash
 # ElixIDE: Script para iniciar ElixIDE
-# Este script carga el entorno y ejecuta yarn start
+# Este script carga el entorno y ejecuta ElixIDE
 
 cd ~/proyectos/ElixIDE
 
@@ -21,7 +21,7 @@ if [ ! -d "out" ] || [ -z "$(ls -A out 2>/dev/null)" ]; then
     yarn compile
 fi
 
-# Iniciar ElixIDE
+# Iniciar ElixIDE usando el script code.sh
 echo "🚀 Iniciando ElixIDE..."
-yarn start
+./scripts/code.sh
 
