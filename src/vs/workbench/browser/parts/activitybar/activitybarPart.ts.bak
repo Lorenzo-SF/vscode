@@ -8,12 +8,12 @@ import './media/activityaction.css';
 import { localize, localize2 } from '../../../../nls.js';
 import { ActionsOrientation } from '../../../../base/browser/ui/actionbar/actionbar.js';
 import { Part } from '../../part.js';
-import { ActivityBarPosition, IWorkbenchLayoutService, LayoutSettings, Parts } from '../../../services/layout/browser/layoutService.js';
+import { ActivityBarPosition, IWorkbenchLayoutService, LayoutSettings, Parts, Position } from '../../../services/layout/browser/layoutService.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { ToggleSidebarPositionAction, ToggleSidebarVisibilityAction } from '../../actions/layoutActions.js';
 import { IThemeService, IColorTheme, registerThemingParticipant } from '../../../../platform/theme/common/themeService.js';
-import { ACTIVITY_BAR_BACKGROUND, ACTIVITY_BAR_BORDER, ACTIVITY_BAR_ACTIVE_BORDER, ACTIVITY_BAR_ACTIVE_BACKGROUND, ACTIVITY_BAR_ACTIVE_FOCUS_BORDER } from '../../../common/theme.js';
+import { ACTIVITY_BAR_BACKGROUND, ACTIVITY_BAR_BORDER, ACTIVITY_BAR_FOREGROUND, ACTIVITY_BAR_ACTIVE_BORDER, ACTIVITY_BAR_BADGE_BACKGROUND, ACTIVITY_BAR_BADGE_FOREGROUND, ACTIVITY_BAR_INACTIVE_FOREGROUND, ACTIVITY_BAR_ACTIVE_BACKGROUND, ACTIVITY_BAR_DRAG_AND_DROP_BORDER, ACTIVITY_BAR_ACTIVE_FOCUS_BORDER } from '../../../common/theme.js';
 import { activeContrastBorder, contrastBorder, focusBorder } from '../../../../platform/theme/common/colorRegistry.js';
 import { addDisposableListener, append, EventType, isAncestor, $, clearNode } from '../../../../base/browser/dom.js';
 import { assertReturnsDefined } from '../../../../base/common/types.js';
@@ -23,6 +23,7 @@ import { getMenuBarVisibility, MenuSettings } from '../../../../platform/window/
 import { IAction, Separator, SubmenuAction, toAction } from '../../../../base/common/actions.js';
 import { StandardKeyboardEvent } from '../../../../base/browser/keyboardEvent.js';
 import { KeyCode } from '../../../../base/common/keyCodes.js';
+import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
 import { GestureEvent } from '../../../../base/browser/touch.js';
 import { IPaneCompositePart } from '../paneCompositePart.js';
 import { IPaneCompositeBarOptions, PaneCompositeBar } from '../paneCompositeBar.js';
@@ -48,8 +49,8 @@ export class ActivitybarPart extends Part {
 
 	//#region IView
 
-	readonly minimumWidth: number = 0; // ElixIDE: Ocultar activity bar
-	readonly maximumWidth: number = 0; // ElixIDE: Ocultar activity bar
+	readonly minimumWidth: number = 48;
+	readonly maximumWidth: number = 48;
 	readonly minimumHeight: number = 0;
 	readonly maximumHeight: number = Number.POSITIVE_INFINITY;
 
@@ -59,30 +60,52 @@ export class ActivitybarPart extends Part {
 	private content: HTMLElement | undefined;
 
 	constructor(
-		private readonly _paneCompositePart: IPaneCompositePart,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		private readonly paneCompositePart: IPaneCompositePart,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IWorkbenchLayoutService layoutService: IWorkbenchLayoutService,
 		@IThemeService themeService: IThemeService,
 		@IStorageService storageService: IStorageService,
 	) {
 		super(Parts.ACTIVITYBAR_PART, { hasTitle: false }, themeService, storageService, layoutService);
-		// ElixIDE: Estas propiedades no se usan porque la activity bar está oculta
-		// Se mantienen para compatibilidad con la interfaz pero no se utilizan
-		void this._paneCompositePart;
-		void this._instantiationService;
 	}
 
-	// ElixIDE: createCompositeBar() eliminado - no se usa porque la activity bar está oculta en la sidebar
-	// La activity bar se mostrará en la titlebar en lugar de la sidebar
+	private createCompositeBar(): PaneCompositeBar {
+		return this.instantiationService.createInstance(ActivityBarCompositeBar, {
+			partContainerClass: 'activitybar',
+			pinnedViewContainersKey: ActivitybarPart.pinnedViewContainersKey,
+			placeholderViewContainersKey: ActivitybarPart.placeholderViewContainersKey,
+			viewContainersWorkspaceStateKey: ActivitybarPart.viewContainersWorkspaceStateKey,
+			orientation: ActionsOrientation.VERTICAL,
+			icon: true,
+			iconSize: 24,
+			activityHoverOptions: {
+				position: () => this.layoutService.getSideBarPosition() === Position.LEFT ? HoverPosition.RIGHT : HoverPosition.LEFT,
+			},
+			preventLoopNavigation: true,
+			recomputeSizes: false,
+			fillExtraContextMenuActions: (actions, e?: MouseEvent | GestureEvent) => { },
+			compositeSize: 52,
+			colors: (theme: IColorTheme) => ({
+				activeForegroundColor: theme.getColor(ACTIVITY_BAR_FOREGROUND),
+				inactiveForegroundColor: theme.getColor(ACTIVITY_BAR_INACTIVE_FOREGROUND),
+				activeBorderColor: theme.getColor(ACTIVITY_BAR_ACTIVE_BORDER),
+				activeBackground: theme.getColor(ACTIVITY_BAR_ACTIVE_BACKGROUND),
+				badgeBackground: theme.getColor(ACTIVITY_BAR_BADGE_BACKGROUND),
+				badgeForeground: theme.getColor(ACTIVITY_BAR_BADGE_FOREGROUND),
+				dragAndDropBorder: theme.getColor(ACTIVITY_BAR_DRAG_AND_DROP_BORDER),
+				activeBackgroundColor: undefined, inactiveBackgroundColor: undefined, activeBorderBottomColor: undefined,
+			}),
+			overflowActionSize: ActivitybarPart.ACTION_HEIGHT,
+		}, Parts.ACTIVITYBAR_PART, this.paneCompositePart, true);
+	}
 
 	protected override createContentArea(parent: HTMLElement): HTMLElement {
 		this.element = parent;
 		this.content = append(this.element, $('.content'));
 
-		// ElixIDE: No mostrar activity bar en sidebar - se moverá a titlebar
-		// if (this.layoutService.isVisible(Parts.ACTIVITYBAR_PART)) {
-		// 	this.show();
-		// }
+		if (this.layoutService.isVisible(Parts.ACTIVITYBAR_PART)) {
+			this.show();
+		}
 
 		return this.content;
 	}
@@ -115,11 +138,23 @@ export class ActivitybarPart extends Part {
 		container.style.borderColor = borderColor ? borderColor : '';
 	}
 
-	// ElixIDE: show() implementado como no-op - activity bar está oculta y se moverá a titlebar
-	show(_focus?: boolean): void {
-		// No-op: La activity bar está oculta en la sidebar y se mostrará en la titlebar
-		// Este método debe existir porque sidebarPart.ts lo llama
-		return;
+	show(focus?: boolean): void {
+		if (!this.content) {
+			return;
+		}
+
+		if (!this.compositeBar.value) {
+			this.compositeBar.value = this.createCompositeBar();
+			this.compositeBar.value.create(this.content);
+
+			if (this.dimension) {
+				this.layout(this.dimension.width, this.dimension.height);
+			}
+		}
+
+		if (focus) {
+			this.focus();
+		}
 	}
 
 	hide(): void {

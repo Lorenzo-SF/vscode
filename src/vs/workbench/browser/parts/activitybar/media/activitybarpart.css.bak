@@ -63,15 +63,3 @@
 	width: 100%;
 	height: 35px;
 }
-
-/*---------------------------------------------------------------------------------------------
- *  ElixIDE: Ocultar completamente la activity bar original
- *--------------------------------------------------------------------------------------------*/
-
-.monaco-workbench .part.activitybar {
-	display: none !important; /* Ocultar completamente la activity bar original */
-}
-
-.monaco-workbench .activitybar > .content {
-	display: none !important; /* Asegurar que el contenido también se oculte */
-}
