@@ -1,0 +1,44 @@
+diff --git a/product.json b/product.json
+index 0000000..1111111 100644
+--- a/product.json
++++ b/product.json
+@@ -1,6 +1,6 @@
+ {
+-	"nameShort": "Code - OSS",
+-	"nameLong": "Code - OSS",
+-	"applicationName": "code-oss",
++	"nameShort": "ElixIDE",
++	"nameLong": "ElixIDE - Elixir Development Environment",
++	"applicationName": "elixide",
+ 	"dataFolderName": ".code-oss",
+ 	"win32MutexName": "code-oss",
+@@ -15,7 +15,7 @@
+ 	"win32DirName": "Code - OSS",
+-	"win32DirName": "ElixIDE",
+ 	"win32NameVersion": "Code - OSS",
+-	"win32NameVersion": "ElixIDE",
+ 	"win32RegValueName": "Code - OSS",
+-	"win32RegValueName": "ElixIDE",
+ 	"darwinBundleIdentifier": "com.visualstudio.code.oss",
+-	"darwinBundleIdentifier": "com.elixide.app",
+ 	"linuxIconName": "code-oss",
+-	"linuxIconName": "elixide",
+diff --git a/package.json b/package.json
+index 0000000..2222222 100644
+--- a/package.json
++++ b/package.json
+@@ -1,5 +1,5 @@
+ {
+-	"name": "code-oss-dev",
++	"name": "elixide",
+ 	"version": "1.108.0",
+ 	"distro": "1133c0369c2db6f38f7f0e99737dc4770d393748",
+ 	"author": {
+-		"name": "Microsoft Corporation"
++		"name": "ElixIDE Team"
+ 	},
+ 	"displayName": "Code - OSS",
+-	"displayName": "ElixIDE",
+ 	"description": "Code editing. Redefined.",
+-	"description": "Elixir Development Environment based on VSCode",
+

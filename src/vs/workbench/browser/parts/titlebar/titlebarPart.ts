@@ -14,7 +14,7 @@ import { StandardMouseEvent } from '../../../../base/browser/mouseEvent.js';
 import { IConfigurationService, IConfigurationChangeEvent } from '../../../../platform/configuration/common/configuration.js';
 import { DisposableStore, IDisposable, MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { IBrowserWorkbenchEnvironmentService } from '../../../services/environment/browser/environmentService.js';
-import { IThemeService } from '../../../../platform/theme/common/themeService.js';
+import { IThemeService, IColorTheme } from '../../../../platform/theme/common/themeService.js';
 import { TITLE_BAR_ACTIVE_BACKGROUND, TITLE_BAR_ACTIVE_FOREGROUND, TITLE_BAR_INACTIVE_FOREGROUND, TITLE_BAR_INACTIVE_BACKGROUND, TITLE_BAR_BORDER, WORKBENCH_BACKGROUND } from '../../../common/theme.js';
 import { isMacintosh, isWindows, isLinux, isWeb, isNative, platformLocale } from '../../../../base/common/platform.js';
 import { Color } from '../../../../base/common/color.js';
@@ -29,7 +29,6 @@ import { Action2, IMenu, IMenuService, MenuId, registerAction2 } from '../../../
 import { IContextKey, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IHostService } from '../../../services/host/browser/host.js';
 import { WindowTitle } from './windowTitle.js';
-import { CommandCenterControl } from './commandCenterControl.js';
 import { Categories } from '../../../../platform/action/common/actionCommonCategories.js';
 import { WorkbenchToolBar } from '../../../../platform/actions/browser/toolbar.js';
 import { ACCOUNTS_ACTIVITY_ID, GLOBAL_ACTIVITY_ID } from '../../../common/activity.js';
@@ -55,6 +54,12 @@ import { IHoverDelegate } from '../../../../base/browser/ui/hover/hoverDelegate.
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { safeIntl } from '../../../../base/common/date.js';
 import { IsCompactTitleBarContext, TitleBarVisibleContext } from '../../../common/contextkeys.js';
+import { ActivityBarCompositeBar, ActivitybarPart } from '../activitybar/activitybarPart.js';
+import { SidebarPart } from '../sidebar/sidebarPart.js';
+import { IPaneCompositeBarOptions } from '../paneCompositeBar.js';
+import { ACTIVITY_BAR_ACTIVE_BORDER, ACTIVITY_BAR_ACTIVE_BACKGROUND, ACTIVITY_BAR_BADGE_BACKGROUND, ACTIVITY_BAR_BADGE_FOREGROUND, ACTIVITY_BAR_INACTIVE_FOREGROUND, ACTIVITY_BAR_FOREGROUND, ACTIVITY_BAR_DRAG_AND_DROP_BORDER } from '../../../common/theme.js';
+import { IExtensionService } from '../../../services/extensions/common/extensions.js';
+import { IViewDescriptorService, ViewContainerLocation } from '../../../common/views.js';
 
 export interface ITitleVariable {
 	readonly name: string;
@@ -276,6 +281,10 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 	private readonly editorToolbarMenuDisposables = this._register(new DisposableStore());
 	private readonly layoutToolbarMenuDisposables = this._register(new DisposableStore());
 	private readonly activityToolbarDisposables = this._register(new DisposableStore());
+	
+	// ElixIDE: Activity bar horizontal en titlebar
+	private titlebarActivityBarContainer: HTMLElement | undefined;
+	private titlebarActivityBar: ActivityBarCompositeBar | undefined;
 
 	private readonly hoverDelegate: IHoverDelegate;
 
@@ -304,11 +313,17 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 		@IWorkbenchLayoutService layoutService: IWorkbenchLayoutService,
 		@IContextKeyService protected readonly contextKeyService: IContextKeyService,
 		@IHostService private readonly hostService: IHostService,
+		@IEditorGroupsService editorGroupsService: IEditorGroupsService,
 		@IEditorService private readonly editorService: IEditorService,
 		@IMenuService private readonly menuService: IMenuService,
-		@IKeybindingService private readonly keybindingService: IKeybindingService
+		@IKeybindingService private readonly keybindingService: IKeybindingService,
+		@IExtensionService private readonly extensionService: IExtensionService,
+		@IViewDescriptorService private readonly viewDescriptorService: IViewDescriptorService,
 	) {
 		super(id, { hasTitle: false }, themeService, storageService, layoutService);
+
+		// ElixIDE: Usar editorGroupsService para evitar error de compilación
+		void editorGroupsService;
 
 		this.isAuxiliary = targetWindow.vscodeWindowId !== mainWindow.vscodeWindowId;
 
@@ -449,6 +464,9 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 	protected override createContentArea(parent: HTMLElement): HTMLElement {
 		this.element = parent;
 		this.rootContainer = append(parent, $('.titlebar-container'));
+		
+		// ElixIDE: Agregar clase has-center para que el CSS se aplique correctamente
+		this.rootContainer.classList.add('has-center');
 
 		this.leftContent = append(this.rootContainer, $('.titlebar-left'));
 		this.centerContent = append(this.rootContainer, $('.titlebar-center'));
@@ -472,9 +490,213 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 			this.installMenubar();
 		}
 
-		// Title
+		// ElixIDE: Ocultar título de ventana - será reemplazado por activity bar
 		this.title = append(this.centerContent, $('div.window-title'));
-		this.createTitle();
+		this.title.style.display = 'none';
+		
+		// ElixIDE: Asegurar que centerContent sea visible y tenga el tamaño correcto
+		// IMPORTANTE: centerContent debe ocupar el espacio central del titlebar
+		this.centerContent.style.display = 'flex';
+		this.centerContent.style.visibility = 'visible';
+		this.centerContent.style.width = '100%';
+		this.centerContent.style.height = '100%';
+		this.centerContent.style.flexGrow = '1';
+		this.centerContent.style.flexShrink = '1';
+		this.centerContent.style.minWidth = '0';
+		this.centerContent.style.justifyContent = 'center';
+		this.centerContent.style.alignItems = 'center';
+		this.centerContent.style.overflow = 'visible';
+		
+		// ElixIDE: Crear contenedor para activity bar horizontal en titlebar
+		// Este contenedor reemplazará completamente el título de ventana
+		this.titlebarActivityBarContainer = append(this.centerContent, $('div.titlebar-activity-bar'));
+		// ElixIDE: Agregar clase para CSS
+		this.titlebarActivityBarContainer.classList.add('titlebar-activity-bar');
+		// ElixIDE: Accesibilidad - Etiquetas ARIA
+		this.titlebarActivityBarContainer.setAttribute('role', 'toolbar');
+		this.titlebarActivityBarContainer.setAttribute('aria-label', 'Activity Bar');
+		// ElixIDE: Asegurar que el contenedor sea visible y centrado
+		// CRÍTICO: Debe ocupar todo el espacio disponible en centerContent
+		this.titlebarActivityBarContainer.style.display = 'flex';
+		this.titlebarActivityBarContainer.style.visibility = 'visible';
+		this.titlebarActivityBarContainer.style.justifyContent = 'center';
+		this.titlebarActivityBarContainer.style.alignItems = 'center';
+		this.titlebarActivityBarContainer.style.width = '100%';
+		this.titlebarActivityBarContainer.style.height = '100%';
+		this.titlebarActivityBarContainer.style.minHeight = '30px';
+		this.titlebarActivityBarContainer.style.position = 'relative';
+		this.titlebarActivityBarContainer.style.zIndex = '10';
+		this.titlebarActivityBarContainer.style.overflow = 'visible';
+		this.titlebarActivityBarContainer.style.flexGrow = '1';
+		this.titlebarActivityBarContainer.style.flexShrink = '1';
+		this.titlebarActivityBarContainer.style.minWidth = '0';
+		
+		console.log('[ElixIDE] ✅ Created titlebarActivityBarContainer in centerContent', {
+			container: this.titlebarActivityBarContainer,
+			parent: this.centerContent,
+			parentClasses: this.centerContent.className,
+			containerClasses: this.titlebarActivityBarContainer.className,
+			parentVisible: this.centerContent.style.display !== 'none' && this.centerContent.style.visibility !== 'hidden',
+			containerVisible: this.titlebarActivityBarContainer.style.display !== 'none' && this.titlebarActivityBarContainer.style.visibility !== 'hidden',
+			parentWidth: this.centerContent.style.width,
+			containerWidth: this.titlebarActivityBarContainer.style.width
+		});
+		// ElixIDE: Retrasar la creación de la activity bar hasta que el layout esté inicializado
+		// Usar múltiples estrategias para asegurar que se cree correctamente
+		console.log('[ElixIDE] Setting up activity bar creation in titlebar');
+		
+		// ElixIDE: Verificar que el contenedor esté en el DOM y sea visible
+		setTimeout(() => {
+			if (this.titlebarActivityBarContainer) {
+				const isInDOM = document.body.contains(this.titlebarActivityBarContainer) || 
+				               this.rootContainer.contains(this.titlebarActivityBarContainer) ||
+				               this.centerContent.contains(this.titlebarActivityBarContainer);
+				const computedStyle = window.getComputedStyle(this.titlebarActivityBarContainer);
+				console.log('[ElixIDE] 🔍 Container verification:', {
+					exists: !!this.titlebarActivityBarContainer,
+					inDOM: isInDOM,
+					display: computedStyle.display,
+					visibility: computedStyle.visibility,
+					width: computedStyle.width,
+					height: computedStyle.height,
+					opacity: computedStyle.opacity,
+					zIndex: computedStyle.zIndex,
+					parent: this.centerContent,
+					parentDisplay: window.getComputedStyle(this.centerContent).display,
+					parentVisibility: window.getComputedStyle(this.centerContent).visibility
+				});
+			}
+		}, 100);
+		
+		// Estrategia 1: requestAnimationFrame inmediato
+		requestAnimationFrame(() => {
+			// Intentar crear la activity bar, con reintentos si SidebarPart no está disponible
+			let attempts = 0;
+			const maxAttempts = 50; // Aumentar intentos significativamente
+			const tryCreate = () => {
+				console.log(`[ElixIDE] 🔄 Attempt ${attempts + 1}/${maxAttempts} to create activity bar`);
+				
+				// Verificar que el contenedor exista y sea visible antes de intentar crear
+				if (!this.titlebarActivityBarContainer) {
+					console.error('[ElixIDE] ❌ titlebarActivityBarContainer is null!');
+					attempts++;
+					if (attempts < maxAttempts) {
+						setTimeout(tryCreate, 200);
+					}
+					return;
+				}
+				
+				// Verificar visibilidad del contenedor
+				const containerStyle = window.getComputedStyle(this.titlebarActivityBarContainer);
+				if (containerStyle.display === 'none' || containerStyle.visibility === 'hidden') {
+					console.warn('[ElixIDE] ⚠️ Container is hidden, forcing visibility');
+					this.titlebarActivityBarContainer.style.display = 'flex';
+					this.titlebarActivityBarContainer.style.visibility = 'visible';
+				}
+				
+				if (this.createTitlebarActivityBar()) {
+					console.log('[ElixIDE] ✅ Activity bar created successfully!');
+					
+					// CRÍTICO: Esperar a que las extensiones se registren antes de verificar los action items
+					// El PaneCompositeBar espera a whenInstalledExtensionsRegistered() antes de renderizar botones
+					this.extensionService.whenInstalledExtensionsRegistered().then(() => {
+						console.log('[ElixIDE] 📦 Extensions registered, checking action items...');
+						
+						// Verificar después de que las extensiones se registren
+						setTimeout(() => {
+							const actionItems = this.titlebarActivityBarContainer?.querySelectorAll('.action-item');
+							const actionBar = this.titlebarActivityBarContainer?.querySelector('.monaco-action-bar');
+							console.log('[ElixIDE] 📊 Action bar status after extensions registered:', {
+								actionItems: actionItems?.length || 0,
+								hasActionBar: !!actionBar,
+								containerVisible: window.getComputedStyle(this.titlebarActivityBarContainer!).display !== 'none',
+								actionBarVisible: actionBar ? window.getComputedStyle(actionBar).display !== 'none' : false
+							});
+							
+							if (actionItems && actionItems.length === 0) {
+								console.warn('[ElixIDE] ⚠️ No action items found after extensions registered');
+								console.warn('[ElixIDE] Container HTML:', this.titlebarActivityBarContainer?.innerHTML.substring(0, 500));
+								
+								// CRÍTICO: Forzar registro manual de view containers
+								console.log('[ElixIDE] 🔧 Attempting to force register view containers...');
+								this.forceRegisterViewContainers().catch(err => {
+									console.error('[ElixIDE] ❌ Error in forceRegisterViewContainers:', err);
+								});
+								
+								// Intentar forzar el renderizado si aún no hay items
+								if (actionBar) {
+									const actionBarElement = actionBar as HTMLElement;
+									actionBarElement.style.display = 'flex';
+									actionBarElement.style.visibility = 'visible';
+									console.log('[ElixIDE] 🔧 Forced action bar visibility');
+								}
+								
+								// Verificar nuevamente después de forzar registro
+								setTimeout(() => {
+									const actionItemsAfter = this.titlebarActivityBarContainer?.querySelectorAll('.action-item');
+									if (actionItemsAfter && actionItemsAfter.length > 0) {
+										console.log('[ElixIDE] ✅ Action items found after forced registration:', actionItemsAfter.length);
+										// Asegurar que todos los items sean visibles
+										actionItemsAfter.forEach((item: Element) => {
+											const el = item as HTMLElement;
+											el.style.display = 'flex';
+											el.style.visibility = 'visible';
+											el.style.opacity = '1';
+										});
+									} else {
+										console.error('[ElixIDE] ❌ Still no action items after forced registration');
+									}
+								}, 1000);
+							} else if (actionItems && actionItems.length > 0) {
+								console.log('[ElixIDE] ✅ Action items found:', actionItems.length);
+								// Asegurar que todos los items sean visibles
+								actionItems.forEach((item: Element) => {
+									const el = item as HTMLElement;
+									el.style.display = 'flex';
+									el.style.visibility = 'visible';
+									el.style.opacity = '1';
+								});
+							}
+						}, 1000); // Dar tiempo adicional después de que se registren las extensiones
+					}).catch(err => {
+						console.error('[ElixIDE] ❌ Error waiting for extensions:', err);
+					});
+					
+					return; // Éxito
+				}
+				attempts++;
+				if (attempts < maxAttempts) {
+					setTimeout(tryCreate, 200); // Reintentar después de 200ms
+				} else {
+					console.error('[ElixIDE] ❌ Failed to create activity bar in titlebar after', maxAttempts, 'attempts');
+					// Intentar una última vez después de más tiempo
+					setTimeout(() => {
+						console.log('[ElixIDE] 🔄 Final attempt to create activity bar');
+						this.createTitlebarActivityBar();
+					}, 2000);
+				}
+			};
+			tryCreate();
+		});
+		
+		// Estrategia 2: También intentar después de que el layout se complete
+		this._register(this.layoutService.onDidChangePartVisibility(() => {
+			// Si aún no se ha creado, intentar crear
+			if (!this.titlebarActivityBar) {
+				console.log('[ElixIDE] Layout visibility changed, attempting to create activity bar');
+				setTimeout(() => {
+					this.createTitlebarActivityBar();
+				}, 100);
+			} else {
+				// Si ya existe, verificar que los botones estén visibles
+				setTimeout(() => {
+					const actionItems = this.titlebarActivityBarContainer?.querySelectorAll('.action-item');
+					if (actionItems && actionItems.length === 0) {
+						console.warn('[ElixIDE] Activity bar exists but no action items found, may need to wait for extensions');
+					}
+				}, 500);
+			}
+		}));
 
 		// Create Toolbar Actions
 		if (hasCustomTitlebar(this.configurationService, this.titleBarStyle)) {
@@ -557,29 +779,414 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 	private createTitle(): void {
 		this.titleDisposables.clear();
 
-		const isShowingTitleInNativeTitlebar = hasNativeTitlebar(this.configurationService, this.titleBarStyle);
+		// ElixIDE: Ocultar completamente el título - será reemplazado por activity bar
+		// El título no se mostrará en la titlebar
+		reset(this.title);
+		this.title.style.display = 'none';
+		
+		// ElixIDE: Código original comentado - el título se oculta para dar espacio a la activity bar
+		// const isShowingTitleInNativeTitlebar = hasNativeTitlebar(this.configurationService, this.titleBarStyle);
+		// 
+		// // Text Title
+		// if (!this.isCommandCenterVisible) {
+		// 	if (!isShowingTitleInNativeTitlebar) {
+		// 		this.title.textContent = this.windowTitle.value;
+		// 		this.titleDisposables.add(this.windowTitle.onDidChange(() => {
+		// 			this.title.textContent = this.windowTitle.value;
+		// 			if (this.lastLayoutDimensions) {
+		// 				this.updateLayout(this.lastLayoutDimensions);
+		// 			}
+		// 		}));
+		// 	} else {
+		// 		reset(this.title);
+		// 	}
+		// }
+		// 
+		// // Menu Title
+		// else {
+		// 	const commandCenter = this.instantiationService.createInstance(CommandCenterControl, this.windowTitle, this.hoverDelegate);
+		// 	reset(this.title, commandCenter.element);
+		// 	this.titleDisposables.add(commandCenter);
+		// }
+	}
 
-		// Text Title
-		if (!this.isCommandCenterVisible) {
-			if (!isShowingTitleInNativeTitlebar) {
-				this.title.textContent = this.windowTitle.value;
-				this.titleDisposables.add(this.windowTitle.onDidChange(() => {
-					this.title.textContent = this.windowTitle.value;
-					if (this.lastLayoutDimensions) {
-						this.updateLayout(this.lastLayoutDimensions); // layout menubar and other renderings in the titlebar
+	// ElixIDE: Crear activity bar horizontal en titlebar
+	// Retorna true si se creó exitosamente, false si necesita reintento
+	private createTitlebarActivityBar(): boolean {
+		if (!this.titlebarActivityBarContainer) {
+			return false;
+		}
+
+		// ElixIDE: Obtener SidebarPart existente desde el layoutService
+		// El SidebarPart ya está creado y registrado en el workbench
+		// Nota: getPart está en la implementación pero no en la interfaz, usar casting
+		const layoutServiceAny = this.layoutService as any;
+		let sidebarPart: SidebarPart | undefined;
+		try {
+			sidebarPart = layoutServiceAny.getPart(Parts.SIDEBAR_PART) as SidebarPart;
+			if (!sidebarPart) {
+				console.warn('[ElixIDE] SidebarPart not found, will retry');
+				return false; // Necesita reintento
+			}
+			console.log('[ElixIDE] SidebarPart obtained successfully');
+		} catch (e: any) {
+			// getPart puede lanzar error si la parte no existe
+			console.warn('[ElixIDE] Error getting SidebarPart:', e?.message || e);
+			return false;
+		}
+
+		// Si ya existe, no crear de nuevo
+		if (this.titlebarActivityBar) {
+			return true;
+		}
+
+		// Crear opciones para ActivityBarCompositeBar horizontal
+		// Nota: partContainerClass debe coincidir con la clase del contenedor para que el CSS se aplique
+		const options: IPaneCompositeBarOptions = {
+			partContainerClass: 'titlebar-activity-bar',
+			pinnedViewContainersKey: ActivitybarPart.pinnedViewContainersKey,
+			placeholderViewContainersKey: ActivitybarPart.placeholderViewContainersKey,
+			viewContainersWorkspaceStateKey: ActivitybarPart.viewContainersWorkspaceStateKey,
+			icon: true,
+			orientation: ActionsOrientation.HORIZONTAL, // ElixIDE: Horizontal en titlebar
+			recomputeSizes: true,
+			activityHoverOptions: {
+				position: () => HoverPosition.BELOW, // ElixIDE: Hover debajo en titlebar
+			},
+			fillExtraContextMenuActions: (actions, e) => {
+				// ElixIDE: Menú contextual para activity bar en titlebar
+			},
+			compositeSize: 0,
+			iconSize: 20, // ElixIDE: Tamaño de icono para titlebar (20px)
+			overflowActionSize: 28, // ElixIDE: Tamaño de botón para titlebar
+			colors: (theme: IColorTheme) => ({
+				activeForegroundColor: theme.getColor(ACTIVITY_BAR_FOREGROUND),
+				inactiveForegroundColor: theme.getColor(ACTIVITY_BAR_INACTIVE_FOREGROUND),
+				activeBorderColor: theme.getColor(ACTIVITY_BAR_ACTIVE_BORDER),
+				activeBackground: theme.getColor(ACTIVITY_BAR_ACTIVE_BACKGROUND),
+				badgeBackground: theme.getColor(ACTIVITY_BAR_BADGE_BACKGROUND),
+				badgeForeground: theme.getColor(ACTIVITY_BAR_BADGE_FOREGROUND),
+				dragAndDropBorder: theme.getColor(ACTIVITY_BAR_DRAG_AND_DROP_BORDER),
+				activeBackgroundColor: undefined,
+				inactiveBackgroundColor: undefined,
+				activeBorderBottomColor: undefined,
+			}),
+			compact: true
+		};
+
+		// Crear ActivityBarCompositeBar horizontal usando instantiationService
+		// El instantiationService inyectará automáticamente todos los servicios necesarios
+		this.titlebarActivityBar = this._register(
+			this.instantiationService.createInstance(
+				ActivityBarCompositeBar,
+				options,
+				Parts.ACTIVITYBAR_PART,
+				sidebarPart,
+				false // showGlobalActivities
+			)
+		);
+
+		// Renderizar en el contenedor
+		if (!this.titlebarActivityBarContainer) {
+			console.error('[ElixIDE] titlebarActivityBarContainer is null');
+			return false;
+		}
+
+		try {
+			// El método create() retorna el elemento creado (action bar con clase .composite-bar)
+			const activityBarElement = this.titlebarActivityBar.create(this.titlebarActivityBarContainer);
+			
+			if (!activityBarElement) {
+				console.warn('[ElixIDE] Activity bar create() returned null/undefined');
+				return false;
+			}
+
+			// El elemento creado es un div con clase .composite-bar
+			// Asegurar que el elemento creado sea visible y horizontal
+			activityBarElement.style.display = 'flex';
+			activityBarElement.style.visibility = 'visible';
+			activityBarElement.style.flexDirection = 'row';
+			activityBarElement.style.alignItems = 'center';
+			activityBarElement.style.justifyContent = 'center';
+			activityBarElement.style.height = '100%';
+			activityBarElement.style.width = 'auto';
+			activityBarElement.style.margin = '0';
+			activityBarElement.style.padding = '0';
+			activityBarElement.style.minHeight = '30px'; // Asegurar altura mínima
+			
+			// Asegurar que el contenedor sea visible
+			this.titlebarActivityBarContainer.style.display = 'flex';
+			this.titlebarActivityBarContainer.style.visibility = 'visible';
+			this.titlebarActivityBarContainer.style.width = '100%';
+			this.titlebarActivityBarContainer.style.height = '100%';
+			this.titlebarActivityBarContainer.style.minHeight = '30px'; // Asegurar altura mínima
+			this.titlebarActivityBarContainer.style.position = 'relative'; // Para posicionamiento
+			
+			// Los botones aparecerán después de que las extensiones se registren
+			// Usar MutationObserver para detectar cuando aparezcan los botones
+			let actionBarFound = false;
+			
+			const styleActionBar = (actionBar: HTMLElement) => {
+				if (actionBarFound) return; // Ya se estilizó
+				
+				actionBar.style.display = 'flex';
+				actionBar.style.flexDirection = 'row';
+				actionBar.style.alignItems = 'center';
+				actionBar.style.justifyContent = 'center';
+				actionBar.style.gap = '4px';
+				actionBar.style.height = '100%';
+				actionBar.style.width = 'auto';
+				actionBar.style.visibility = 'visible';
+				actionBar.style.opacity = '1';
+				actionBar.style.position = 'relative';
+				actionBar.style.zIndex = '10';
+				
+				// Asegurar que los action items sean visibles
+				const actionItems = actionBar.querySelectorAll('.action-item');
+				actionItems.forEach((item: Element) => {
+					const el = item as HTMLElement;
+					el.style.display = 'flex';
+					el.style.visibility = 'visible';
+					el.style.opacity = '1';
+					el.style.position = 'relative';
+					el.style.zIndex = '10';
+				});
+				
+				if (actionItems.length > 0) {
+					actionBarFound = true;
+					console.log('[ElixIDE] ✅ Action bar found and styled, action items:', actionItems.length);
+				}
+			};
+			
+			const observer = new MutationObserver((mutations) => {
+				const actionBar = activityBarElement.querySelector('.monaco-action-bar') as HTMLElement;
+				if (actionBar && !actionBarFound) {
+					styleActionBar(actionBar);
+					if (actionBarFound) {
+						observer.disconnect();
 					}
-				}));
-			} else {
-				reset(this.title);
+				}
+			});
+			
+			observer.observe(activityBarElement, {
+				childList: true,
+				subtree: true,
+				attributes: false
+			});
+			
+			// También observar el contenedor completo
+			observer.observe(this.titlebarActivityBarContainer, {
+				childList: true,
+				subtree: true,
+				attributes: false
+			});
+			
+			// También verificar inmediatamente y después de delays
+			const checkActionBar = () => {
+				const actionBar = activityBarElement.querySelector('.monaco-action-bar') as HTMLElement;
+				if (actionBar && !actionBarFound) {
+					styleActionBar(actionBar);
+					if (actionBarFound) {
+						observer.disconnect(); // Dejar de observar una vez encontrado
+					}
+				}
+			};
+			
+			// Verificar inmediatamente
+			checkActionBar();
+			
+			// Verificar después de delays (las extensiones pueden tardar en registrarse)
+			setTimeout(checkActionBar, 100);
+			setTimeout(checkActionBar, 500);
+			setTimeout(checkActionBar, 1000);
+			setTimeout(checkActionBar, 2000);
+			
+			// Forzar layout después de crear
+			setTimeout(() => {
+				if (this.lastLayoutDimensions) {
+					this.layout(this.lastLayoutDimensions.width, this.lastLayoutDimensions.height);
+				}
+				checkActionBar(); // Verificar nuevamente después del layout
+			}, 100);
+			
+			// Forzar visibilidad inmediatamente
+			this.titlebarActivityBarContainer.style.display = 'flex';
+			this.titlebarActivityBarContainer.style.visibility = 'visible';
+			activityBarElement.style.display = 'flex';
+			activityBarElement.style.visibility = 'visible';
+			
+			console.log('[ElixIDE] ✅ Activity bar created successfully in titlebar', {
+				container: this.titlebarActivityBarContainer,
+				element: activityBarElement,
+				elementClasses: activityBarElement.className,
+				containerInDOM: document.body.contains(this.titlebarActivityBarContainer) || 
+				               this.rootContainer.contains(this.titlebarActivityBarContainer),
+				containerDisplay: window.getComputedStyle(this.titlebarActivityBarContainer).display,
+				containerVisibility: window.getComputedStyle(this.titlebarActivityBarContainer).visibility,
+				elementDisplay: window.getComputedStyle(activityBarElement).display,
+				elementVisibility: window.getComputedStyle(activityBarElement).visibility
+			});
+		} catch (error: any) {
+			console.error('[ElixIDE] Error creating activity bar in titlebar:', error);
+			console.error('[ElixIDE] Error stack:', error?.stack);
+			return false;
+		}
+
+		return true; // Éxito
+	}
+
+	// ElixIDE: Forzar registro manual de view containers
+	// Este método se llama cuando las extensiones se registran pero no hay action items
+	private async forceRegisterViewContainers(): Promise<void> {
+		if (!this.titlebarActivityBar) {
+			console.warn('[ElixIDE] Cannot force register: titlebarActivityBar is null');
+			return;
+		}
+
+		// Obtener view containers disponibles para Sidebar
+		const viewContainers = this.viewDescriptorService.getViewContainersByLocation(ViewContainerLocation.Sidebar);
+		console.log('[ElixIDE] 🔍 Found view containers to register:', viewContainers.length, viewContainers.map(v => v.id));
+
+		if (viewContainers.length === 0) {
+			console.warn('[ElixIDE] No view containers found for Sidebar location');
+			return;
+		}
+
+		// Acceder al PaneCompositeBar interno usando casting
+		// El ActivityBarCompositeBar extiende PaneCompositeBar, así que podemos acceder a métodos privados
+		const paneCompositeBar = this.titlebarActivityBar as any;
+		
+		// Verificar que el método existe
+		if (typeof paneCompositeBar.onDidRegisterViewContainers !== 'function') {
+			console.error('[ElixIDE] onDidRegisterViewContainers method not found in ActivityBarCompositeBar');
+			// Intentar otra estrategia: llamar a getViewContainers y forzar registro
+			try {
+				const getViewContainers = paneCompositeBar.getViewContainers;
+				if (typeof getViewContainers === 'function') {
+					const existingContainers = getViewContainers.call(paneCompositeBar);
+					console.log('[ElixIDE] Existing containers in PaneCompositeBar:', existingContainers.length);
+					if (existingContainers.length === 0) {
+						// Forzar registro llamando directamente al método privado usando bind
+						const onDidRegister = (paneCompositeBar as any).onDidRegisterViewContainers;
+						if (typeof onDidRegister === 'function') {
+							onDidRegister.call(paneCompositeBar, viewContainers);
+							console.log('[ElixIDE] ✅ Forced registration via direct method call');
+						}
+					}
+				}
+			} catch (e: any) {
+				console.error('[ElixIDE] ❌ Error in fallback registration:', e?.message || e);
+			}
+			return;
+		}
+
+		// Forzar registro manual de cada view container
+		console.log('[ElixIDE] 🔧 Forcing registration of view containers...');
+		
+		// Obtener el compositeBar antes de registrar
+		const compositeBar = (paneCompositeBar as any).compositeBar;
+		console.log('[ElixIDE] 📦 CompositeBar obtained:', !!compositeBar, 'has create method:', typeof compositeBar?.create === 'function');
+		
+		// Verificar el estado antes de registrar
+		const actionItemsBefore = this.titlebarActivityBarContainer?.querySelectorAll('.action-item');
+		console.log('[ElixIDE] 📊 Action items before registration:', actionItemsBefore?.length || 0);
+		
+		try {
+			// Llamar a onDidRegisterViewContainers con todos los containers a la vez
+			// Este método es privado pero podemos accederlo con casting
+			// NOTA: onDidRegisterViewContainers ya llama a updateCompositeBarActionItem y showOrHideViewContainer
+			paneCompositeBar.onDidRegisterViewContainers(viewContainers);
+			console.log('[ElixIDE] ✅ Forced registration of all view containers');
+			
+			// Verificar que getCompositeActions se haya llamado para cada container
+			for (const viewContainer of viewContainers) {
+				const compositeActions = (paneCompositeBar as any).compositeActions?.get(viewContainer.id);
+				console.log('[ElixIDE] 📋 Composite actions for', viewContainer.id, ':', !!compositeActions, 'has activityAction:', !!compositeActions?.activityAction);
+			}
+			
+			// CRÍTICO: Asegurar que los composites estén pinned para que se muestren
+			// updateCompositeSwitcher solo muestra items que están pinned o son activeItem
+			for (const viewContainer of viewContainers) {
+				try {
+					if (compositeBar && typeof compositeBar.pin === 'function') {
+						await compositeBar.pin(viewContainer.id, false);
+						console.log('[ElixIDE] ✅ Pinned view container:', viewContainer.id);
+					}
+				} catch (err: any) {
+					console.error('[ElixIDE] ❌ Error pinning', viewContainer.id, ':', err?.message || err);
+				}
+			}
+			
+			// CRÍTICO: Establecer dimension si no está establecida
+			// updateCompositeSwitcher requiere que dimension esté definido
+			if (compositeBar && !compositeBar.dimension) {
+				const containerRect = this.titlebarActivityBarContainer?.getBoundingClientRect();
+				if (containerRect) {
+					compositeBar.dimension = { width: containerRect.width, height: containerRect.height };
+					console.log('[ElixIDE] ✅ Set dimension on compositeBar:', compositeBar.dimension);
+				}
+			}
+			
+			// CRÍTICO: Forzar updateCompositeSwitcher para que el composite bar renderice los action items
+			if (compositeBar && typeof compositeBar.updateCompositeSwitcher === 'function') {
+				compositeBar.updateCompositeSwitcher();
+				console.log('[ElixIDE] ✅ Forced updateCompositeSwitcher on compositeBar');
+			}
+			
+			// También forzar recomputeSizes
+			if (compositeBar && typeof compositeBar.recomputeSizes === 'function') {
+				compositeBar.recomputeSizes();
+				console.log('[ElixIDE] ✅ Forced recomputeSizes on compositeBar');
+			}
+			
+			// Verificar el estado después de registrar
+			setTimeout(() => {
+				const actionItemsAfter = this.titlebarActivityBarContainer?.querySelectorAll('.action-item');
+				console.log('[ElixIDE] 📊 Action items after registration (immediate):', actionItemsAfter?.length || 0);
+				
+				// Verificar el HTML del composite bar
+				const compositeBarElement = this.titlebarActivityBarContainer?.querySelector('.composite-bar');
+				if (compositeBarElement) {
+					console.log('[ElixIDE] 📄 Composite bar HTML:', compositeBarElement.innerHTML.substring(0, 500));
+				}
+			}, 100);
+		} catch (e: any) {
+			console.error('[ElixIDE] ❌ Error forcing registration:', e?.message || e);
+			// Intentar uno por uno como fallback
+			console.log('[ElixIDE] 🔄 Trying one-by-one registration...');
+			for (const viewContainer of viewContainers) {
+				try {
+					paneCompositeBar.onDidRegisterViewContainers([viewContainer]);
+					console.log('[ElixIDE] ✅ Forced registration of view container:', viewContainer.id);
+				} catch (err: any) {
+					console.error('[ElixIDE] ❌ Error forcing registration of', viewContainer.id, ':', err?.message || err);
+				}
+			}
+			
+			// Forzar updateCompositeSwitcher y recomputeSizes después de registrar todos
+			const compositeBar = (paneCompositeBar as any).compositeBar;
+			if (compositeBar) {
+				if (typeof compositeBar.updateCompositeSwitcher === 'function') {
+					compositeBar.updateCompositeSwitcher();
+					console.log('[ElixIDE] ✅ Forced updateCompositeSwitcher on compositeBar (fallback)');
+				}
+				if (typeof compositeBar.recomputeSizes === 'function') {
+					compositeBar.recomputeSizes();
+					console.log('[ElixIDE] ✅ Forced recomputeSizes on compositeBar (fallback)');
+				}
 			}
 		}
 
-		// Menu Title
-		else {
-			const commandCenter = this.instantiationService.createInstance(CommandCenterControl, this.windowTitle, this.hoverDelegate);
-			reset(this.title, commandCenter.element);
-			this.titleDisposables.add(commandCenter);
-		}
+		// Verificar que los action items aparezcan después del registro forzado
+		setTimeout(() => {
+			const actionItems = this.titlebarActivityBarContainer?.querySelectorAll('.action-item');
+			console.log('[ElixIDE] 📊 Action items after forced registration:', actionItems?.length || 0);
+			if (actionItems && actionItems.length > 0) {
+				console.log('[ElixIDE] ✅ Successfully registered view containers!');
+			} else {
+				console.warn('[ElixIDE] ⚠️ Still no action items after forced registration');
+			}
+		}, 500);
 	}
 
 	private actionViewItemProvider(action: IAction, options: IBaseActionViewItemOptions): IActionViewItem | undefined {
@@ -908,8 +1515,10 @@ export class MainBrowserTitlebarPart extends BrowserTitlebarPart {
 		@IEditorService editorService: IEditorService,
 		@IMenuService menuService: IMenuService,
 		@IKeybindingService keybindingService: IKeybindingService,
+		@IExtensionService extensionService: IExtensionService,
+		@IViewDescriptorService viewDescriptorService: IViewDescriptorService,
 	) {
-		super(Parts.TITLEBAR_PART, mainWindow, editorGroupService.mainPart, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorService, menuService, keybindingService);
+		super(Parts.TITLEBAR_PART, mainWindow, editorGroupService.mainPart, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorGroupService, editorService, menuService, keybindingService, extensionService, viewDescriptorService);
 	}
 }
 
@@ -943,9 +1552,11 @@ export class AuxiliaryBrowserTitlebarPart extends BrowserTitlebarPart implements
 		@IEditorService editorService: IEditorService,
 		@IMenuService menuService: IMenuService,
 		@IKeybindingService keybindingService: IKeybindingService,
+		@IExtensionService extensionService: IExtensionService,
+		@IViewDescriptorService viewDescriptorService: IViewDescriptorService,
 	) {
 		const id = AuxiliaryBrowserTitlebarPart.COUNTER++;
-		super(`workbench.parts.auxiliaryTitle.${id}`, getWindow(container), editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorService, menuService, keybindingService);
+		super(`workbench.parts.auxiliaryTitle.${id}`, getWindow(container), editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorGroupService, editorService, menuService, keybindingService, extensionService, viewDescriptorService);
 	}
 
 	override get preventZoom(): boolean {

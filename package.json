@@ -33,7 +33,7 @@
     "watch-extensions": "npm run gulp watch-extensions watch-extension-media",
     "watch-extensionsd": "deemon npm run watch-extensions",
     "kill-watch-extensionsd": "deemon --kill npm run watch-extensions",
-    "precommit": "node build/hygiene.ts",
+    "precommit": "bash scripts/pre-commit-check.sh",
     "gulp": "node --max-old-space-size=8192 ./node_modules/gulp/bin/gulp.js",
     "electron": "node build/lib/electron.ts",
     "7z": "7z",
@@ -69,7 +69,14 @@
     "extensions-ci": "npm run gulp extensions-ci",
     "extensions-ci-pr": "npm run gulp extensions-ci-pr",
     "perf": "node scripts/code-perf.js",
-    "update-build-ts-version": "npm install -D typescript@next && npm install -D @typescript/native-preview && (cd build && npm run typecheck)"
+    "update-build-ts-version": "npm install -D typescript@next && npm install -D @typescript/native-preview && (cd build && npm run typecheck)",
+    "elixide:start": "npm run compile && ./scripts/code.sh",
+    "elixide:dev": "npm run watch & npm run elixide:start",
+    "elixide:build": "npm run compile",
+    "elixide:test": "npm run test-node",
+    "elixide:package:macos": "bash scripts/build/darwin.sh",
+    "elixide:package:linux": "bash scripts/build/linux.sh",
+    "elixide:package:windows": "bash scripts/build/win32.ps1"
   },
   "dependencies": {
     "@microsoft/1ds-core-js": "^3.2.13",
@@ -238,5 +245,10 @@
   },
   "optionalDependencies": {
     "windows-foreground-love": "0.5.0"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "bash scripts/pre-commit-check.sh"
+    }
   }
 }

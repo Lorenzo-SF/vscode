@@ -1,0 +1,34 @@
+========================================
+COMANDO PARA INSTALAR UBUNTU MANUALMENTE
+========================================
+
+1. Abre PowerShell como Administrador
+
+2. Ejecuta este comando:
+   wsl --install -d Ubuntu-22.04
+
+3. Cuando Ubuntu se abra por primera vez:
+   - Te pedirá "Enter new UNIX username:"
+   - Escribe: merendandum
+   - Presiona Enter
+   
+   - Te pedirá "New password:"
+   - Escribe: 0000
+   - Presiona Enter
+   
+   - Te pedirá "Retype new password:"
+   - Escribe: 0000
+   - Presiona Enter
+
+4. Después de crear el usuario, Ubuntu iniciará.
+   Cierra la ventana de Ubuntu.
+
+5. Verifica que está instalado:
+   wsl -l -v
+
+6. Ejecuta el setup de ElixIDE:
+   cd C:\Users\loren\Desktop\proyectos\ElixIDE
+   .\setup-yarn.ps1
+
+========================================
+

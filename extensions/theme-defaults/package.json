@@ -60,6 +60,18 @@
         "label": "%lightHcColorThemeLabel%",
         "uiTheme": "hc-light",
         "path": "./themes/hc_light.json"
+      },
+      {
+        "id": "elixide-dark",
+        "label": "%elixideDarkColorThemeLabel%",
+        "uiTheme": "vs-dark",
+        "path": "./themes/elixide-dark.json"
+      },
+      {
+        "id": "elixide-light",
+        "label": "%elixideLightColorThemeLabel%",
+        "uiTheme": "vs",
+        "path": "./themes/elixide-light.json"
       }
     ],
     "iconThemes": [

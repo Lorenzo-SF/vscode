@@ -1,0 +1,77 @@
+warning: CRLF will be replaced by LF in src/vs/workbench/browser/parts/activitybar/media/activitybarpart.css.
+The file will have its original line endings in your working directory
+warning: CRLF will be replaced by LF in src/vs/workbench/browser/parts/titlebar/media/titlebarpart.css.
+The file will have its original line endings in your working directory
+diff --git a/src/vs/workbench/browser/parts/activitybar/activitybarPart.ts b/src/vs/workbench/browser/parts/activitybar/activitybarPart.ts
+index 080b6871061..75f11bc418c 100644
+--- a/src/vs/workbench/browser/parts/activitybar/activitybarPart.ts
++++ b/src/vs/workbench/browser/parts/activitybar/activitybarPart.ts
+@@ -49,8 +49,10 @@ export class ActivitybarPart extends Part {
+ 
+ 	//#region IView
+ 
+-	readonly minimumWidth: number = 48;
+-	readonly maximumWidth: number = 48;
++	readonly minimumWidth: number = 0;
++		// ElixIDE: Ocultar activity bar
++	readonly maximumWidth: number = 0;
++		// ElixIDE: Ocultar activity bar
+ 	readonly minimumHeight: number = 0;
+ 	readonly maximumHeight: number = Number.POSITIVE_INFINITY;
+ 
+@@ -69,7 +71,8 @@ export class ActivitybarPart extends Part {
+ 		super(Parts.ACTIVITYBAR_PART, { hasTitle: false }, themeService, storageService, layoutService);
+ 	}
+ 
+-	private createCompositeBar(): PaneCompositeBar {
++	private createCompositeBar(): PaneCompositeBar | null { // ElixIDE: Retornar null para ocultar
++		return null; // ElixIDE: No crear activity bar en sidebar
+ 		return this.instantiationService.createInstance(ActivityBarCompositeBar, {
+ 			partContainerClass: 'activitybar',
+ 			pinnedViewContainersKey: ActivitybarPart.pinnedViewContainersKey,
+@@ -103,9 +106,9 @@ export class ActivitybarPart extends Part {
+ 		this.element = parent;
+ 		this.content = append(this.element, $('.content'));
+ 
+-		if (this.layoutService.isVisible(Parts.ACTIVITYBAR_PART)) {
+-			this.show();
+-		}
++		// ElixIDE: 		if (this.layoutService.isVisible(Parts.ACTIVITYBAR_PART)) {
++		// ElixIDE: 			this.show();
++		// ElixIDE: 		}
+ 
+ 		return this.content;
+ 	}
+@@ -138,10 +141,10 @@ export class ActivitybarPart extends Part {
+ 		container.style.borderColor = borderColor ? borderColor : '';
+ 	}
+ 
+-	show(focus?: boolean): void {
+-		if (!this.content) {
+-			return;
+-		}
++		// ElixIDE: 	show(focus?: boolean): void {
++		// ElixIDE: 		if (!this.content) {
++		// ElixIDE: 			return;
++		// ElixIDE: 		}
+ 
+ 		if (!this.compositeBar.value) {
+ 			this.compositeBar.value = this.createCompositeBar();
+diff --git a/src/vs/workbench/browser/parts/activitybar/media/activitybarpart.css b/src/vs/workbench/browser/parts/activitybar/media/activitybarpart.css
+index abe1427ca20..e048bafa692 100644
+--- a/src/vs/workbench/browser/parts/activitybar/media/activitybarpart.css
++++ b/src/vs/workbench/browser/parts/activitybar/media/activitybarpart.css
+@@ -63,3 +63,4 @@
+ 	width: 100%;
+ 	height: 35px;
+ }
++/* ElixIDE: Ocultar completamente la activity bar original */\n.monaco-workbench .part.activitybar {\n\tdisplay: none !important;\n}\n\n.monaco-workbench .activitybar > .content {\n\tdisplay: none !important;\n}
+diff --git a/src/vs/workbench/browser/parts/titlebar/media/titlebarpart.css b/src/vs/workbench/browser/parts/titlebar/media/titlebarpart.css
+index 0246cd2ad10..d0fee862ba6 100644
+--- a/src/vs/workbench/browser/parts/titlebar/media/titlebarpart.css
++++ b/src/vs/workbench/browser/parts/titlebar/media/titlebarpart.css
+@@ -465,3 +465,4 @@
+ 	border-radius: 16px;
+ 	text-align: center;
+ }
++/* ElixIDE: Estilos para action bar horizontal en titlebar */\n.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-center > .window-title {\n\tdisplay: none !important; /* Ocultar título de ventana */\n}\n\n.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-center {\n\tflex-grow: 1;\n\tjustify-content: flex-start;\n\tmargin: 0;\n\tpadding-left: 8px;\n}\n\n.monaco-workbench .part.titlebar .titlebar-activity-bar {\n\theight: 100%;\n\tdisplay: flex;\n\tflex-direction: row;\n\talign-items: center;\n\t-webkit-app-region: no-drag;\n}\n\n.monaco-workbench .part.titlebar .titlebar-activity-bar .monaco-action-bar .action-item .action-label {\n\tfont-size: 20px;\n\twidth: 28px;\n\theight: 28px;\n\tline-height: 28px;\n\ttext-align: center;\n}
